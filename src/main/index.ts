@@ -28,7 +28,7 @@ import {
 } from './ipc/extension-host'
 import { flushAllTokens } from './supabaseClient'
 import { loadLocalEnv } from './env'
-import { createMainWindow, isAppLocalUrl } from './windows/main-window'
+import { createMainWindow, installPermissionPolicy, isAllowedNavigation, isAppLocalUrl } from './windows/main-window'
 import { stopKolargrepServers } from './search/kolargrepServer'
 import { applyPathAugmentation } from './binaries'
 import { applyChromiumSwitches, registerGpuFallback } from './perf/startup'
@@ -122,15 +122,18 @@ if (!gotTheLock) {
       // navegaciones al propio dev server (reload de Vite HMR) se dejan pasar
       // EN la ventana; si no, el reload se cancela, la app queda congelada y
       // la URL local termina abierta en el navegador del sistema.
+      // B24: fuera de nuestro origen no se navega dentro de la app (ni file:,
+      // ni scrakk-ext:, ni data:, ni javascript:).
       contents.on('will-navigate', (event, url) => {
-        if (isAppLocalUrl(url)) return
+        if (isAllowedNavigation(url)) return
+        event.preventDefault()
         if (url.startsWith('http://') || url.startsWith('https://')) {
-          event.preventDefault()
           void shell.openExternal(url)
         }
       })
     })
 
+    installPermissionPolicy()
     createMainWindow()
 
     // macOS: re-crear la ventana al activar el dock si no hay ninguna.
