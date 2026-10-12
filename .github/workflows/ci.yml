@@ -17,6 +17,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
+          # Una sola fuente: `engines` en package.json y esta versión.
           node-version: 24
           cache: npm
 
@@ -24,10 +25,16 @@ jobs:
       - name: Permitir scripts de instalación (electron)
         run: npm config set ignore-scripts false
 
+      # A9: `npm ci` respeta el lockfile al pie de la letra (install puede moverlo).
       - name: Instalar dependencias
         run: |
-          npm install --ignore-scripts
+          npm ci --ignore-scripts
           node node_modules/electron/install.js
+
+      # A9: solo dependencias que van en el paquete. Las de build tienen
+      # vulnerabilidades conocidas (ver plans/bugfix-and-quality-plan.md).
+      - name: Auditoría de dependencias de runtime
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Typecheck
         run: npm run typecheck
@@ -35,10 +42,9 @@ jobs:
       - name: Tests
         run: npm test
 
-      # Aviso (no bloquea) mientras el catálogo se migra. Cuando la cobertura
-      # sea completa, pasar a --strict para exigir traducciones al día.
+      # Bloqueante desde que la cobertura es completa (0 missing / 0 stale).
       - name: i18n (cobertura de traducciones)
-        run: node tools/i18n.mjs --check
+        run: node tools/i18n.mjs --check --strict
 
       - name: Build
         run: npm run build

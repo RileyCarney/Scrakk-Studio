@@ -1,0 +1,16 @@
+# Copyright 2026 Scrakk Studio
+# SPDX-License-Identifier: Apache-2.0
+# Licencia completa en LICENSE (Apache License 2.0).
+
+# A9: actualizaciones de dependencias y de acciones de GitHub.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
