@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, session, shell } from 'electron'
 import { WINDOW_CONTROLS_IPC } from '@shared/window-controls'
+import { logError } from '../log'
 
 import { t } from '@shared/i18n'
 /** Debe coincidir con --titlebar-height en core/theme/tokens.css. */
@@ -153,7 +154,7 @@ export function createMainWindow(): BrowserWindow {
   // para siempre. Se recarga; con tope para no entrar en bucle si el crash se repite.
   let recentReloads: number[] = []
   window.webContents.on('render-process-gone', (_event, details) => {
-    console.error('[window] renderer caído:', details.reason, details.exitCode)
+    logError('window', `renderer caído: ${details.reason} (exit ${details.exitCode})`)
     if (details.reason === 'clean-exit' || window.isDestroyed()) return
     const now = Date.now()
     recentReloads = recentReloads.filter((at) => now - at < 60_000)

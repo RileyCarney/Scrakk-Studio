@@ -33,6 +33,7 @@ import { createMainWindow, installPermissionPolicy, isAllowedNavigation, isAppLo
 import { stopKolargrepServers } from './search/kolargrepServer'
 import { applyPathAugmentation } from './binaries'
 import { applyChromiumSwitches, registerGpuFallback } from './perf/startup'
+import { logError } from './log'
 
 // PATH ANTES QUE NADA: lanzada desde el menú, la app hereda el PATH pelado de la
 // sesión (sin nvm/fnm/volta/~/.local/bin), y entonces `npm`, `node` y `git` no
@@ -56,12 +57,8 @@ registerExtensionScheme()
 
 // B7: un error no capturado en el proceso principal no debe ser silencioso ni
 // tirar la app entera sin rastro. Se registra y la app sigue viva.
-process.on('uncaughtException', (error) => {
-  console.error('[main] excepción no capturada:', error)
-})
-process.on('unhandledRejection', (reason) => {
-  console.error('[main] promesa rechazada sin manejar:', reason)
-})
+process.on('uncaughtException', (error) => logError('main', error))
+process.on('unhandledRejection', (reason) => logError('main:unhandled', reason))
 
 app.setName('scrakk-studio')
 if (process.platform === 'linux') {
