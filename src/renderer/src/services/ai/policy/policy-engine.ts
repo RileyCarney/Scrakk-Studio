@@ -327,11 +327,15 @@ export class PolicyEngine {
 
   private evaluateExtensionFilter(rule: PolicyRule, args: Record<string, unknown>): PolicyCheckResult {
     const path = (args.path as string || args.file_path as string || '')
-    const ext = path.split('.').pop()?.toLowerCase()
+    // B17: se mira solo el nombre (sin carpetas con punto: `proj.v2/Makefile`) y
+    // la extensión es lo que sigue al último punto del nombre (`.env` no tiene).
+    const name = path.split(/[\\/]/).pop() ?? ''
+    const dot = name.lastIndexOf('.')
+    const ext = dot > 0 ? name.slice(dot).toLowerCase() : ''
     if (!ext || !rule.extensions) return { decision: PolicyDecision.ALLOW, reason: 'No extension to check', ruleId: rule.id }
-    const allowed = rule.extensions.includes(`.${ext}`)
+    const allowed = rule.extensions.map((e) => e.toLowerCase()).includes(ext)
     if (!allowed) {
-      return { decision: PolicyDecision.DENY, reason: `File extension '.${ext}' is not allowed`, ruleId: rule.id }
+      return { decision: PolicyDecision.DENY, reason: `File extension '${ext}' is not allowed`, ruleId: rule.id }
     }
     return { decision: PolicyDecision.ALLOW, reason: 'Extension check passed', ruleId: rule.id }
   }
