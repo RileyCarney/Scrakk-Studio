@@ -39,8 +39,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Tests
-        run: npm test
+      # T4: cobertura con suelos por área (vitest.config.ts); no baja.
+      - name: Tests (con cobertura)
+        run: npm run test:coverage
 
       # Bloqueante desde que la cobertura es completa (0 missing / 0 stale).
       - name: i18n (cobertura de traducciones)

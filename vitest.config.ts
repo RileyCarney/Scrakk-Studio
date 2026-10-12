@@ -36,6 +36,19 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts'],
     testTimeout: 20_000,
-    hookTimeout: 20_000
+    hookTimeout: 20_000,
+    // T4: suelo por área, medido al introducirlo. Solo se sube, nunca se baja.
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts'],
+      reporter: ['text-summary', 'json-summary'],
+      thresholds: {
+        'src/main/ipc/**': { lines: 19 },
+        'src/main/web/**': { lines: 26 },
+        'src/main/secrets/**': { lines: 75 },
+        'src/renderer/src/services/ai/policy/**': { lines: 58 },
+        'src/shared/**': { lines: 85 }
+      }
+    }
   }
 })
