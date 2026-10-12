@@ -115,6 +115,19 @@ export function createMainWindow(): BrowserWindow {
     })
   }
 
+  // B7: si el renderer muere (crash, OOM, killed) la ventana quedaba en blanco
+  // para siempre. Se recarga; con tope para no entrar en bucle si el crash se repite.
+  let recentReloads: number[] = []
+  window.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[window] renderer caído:', details.reason, details.exitCode)
+    if (details.reason === 'clean-exit' || window.isDestroyed()) return
+    const now = Date.now()
+    recentReloads = recentReloads.filter((at) => now - at < 60_000)
+    if (recentReloads.length >= 3) return
+    recentReloads.push(now)
+    window.webContents.reload()
+  })
+
   // Notificar al renderer los cambios de maximizado (ícono max/restore).
   const notifyMaximized = (): void => {
     if (!window.isDestroyed()) {

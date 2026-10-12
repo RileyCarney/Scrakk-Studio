@@ -53,6 +53,15 @@ registerGpuFallback()
 // webview y los assets de los paquetes. DEBE registrarse antes de `ready`.
 registerExtensionScheme()
 
+// B7: un error no capturado en el proceso principal no debe ser silencioso ni
+// tirar la app entera sin rastro. Se registra y la app sigue viva.
+process.on('uncaughtException', (error) => {
+  console.error('[main] excepción no capturada:', error)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[main] promesa rechazada sin manejar:', reason)
+})
+
 app.setName('scrakk-studio')
 if (process.platform === 'linux') {
   app.setDesktopName('scrakk-studio.desktop')
@@ -132,14 +141,22 @@ if (!gotTheLock) {
 
   // Flush de sesiones al cerrar: garantiza que los últimos tokens queden
   // guardados aunque el refresh haya ocurrido justo antes de salir.
-  app.on('before-quit', () => {
-    void flushAllTokens()
-    // Los hosts de extensión son procesos aparte: sin esto quedan vivos
-    // (y en Windows impiden que el instalador reemplace archivos).
-    void shutdownExtensionHosts()
-    // Los servidores de búsqueda (kolargrep serve) también: el índice tiene un
-    // lock exclusivo por directorio, así que uno colgado bloquea al siguiente.
-    stopKolargrepServers()
+  // Al salir se ESPERAN las tareas de cierre (B9): antes eran fire-and-forget y
+  // el proceso moría antes de guardar los tokens refrescados. Hay un tope de
+  // 3 s para que un proceso colgado no impida cerrar la app.
+  let shuttingDown = false
+  app.on('before-quit', (event) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    event.preventDefault()
+    const tasks = Promise.allSettled([flushAllTokens(), shutdownExtensionHosts()])
+    const deadline = new Promise<void>((resolve) => setTimeout(resolve, 3000))
+    void Promise.race([tasks, deadline]).finally(() => {
+      // Los servidores de búsqueda (kolargrep serve) tienen un lock exclusivo
+      // por directorio: uno colgado bloquea al siguiente, así que van al final.
+      stopKolargrepServers()
+      app.quit()
+    })
   })
 
   app.on('window-all-closed', () => {
