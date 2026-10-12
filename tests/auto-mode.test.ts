@@ -48,3 +48,32 @@ describe('auto mode heuristic (bash)', () => {
     expect(heuristicBashVerdict('gh pr merge 1')).toBe('ask')
   })
 })
+
+describe('auto mode (B18): lo destructivo o no auditable pregunta', () => {
+  it('sin acceso declarado se pregunta (antes se permitía)', () => {
+    expect(autoModeVerdict({ access: null, toolName: 'some_unknown_tool' })).toBe('ask')
+  })
+
+  it('subcomandos git destructivos dentro de un prefijo rutinario piden confirmación', () => {
+    for (const cmd of ['git checkout -- .', 'git stash clear', 'git stash drop', 'git branch -D feat', 'git commit --amend', 'git clean -fd', 'git reset --hard']) {
+      expect(heuristicBashVerdict(cmd), cmd).toBe('ask')
+    }
+  })
+
+  it('intérpretes con código inline piden confirmación', () => {
+    for (const cmd of ['python -c "import os"', 'node -e "require(\'fs\')"', 'python3 -']) {
+      expect(heuristicBashVerdict(cmd), cmd).toBe('ask')
+    }
+  })
+
+  it('procesos interactivos ya no son rutinarios', () => {
+    expect(heuristicBashVerdict('top')).toBe('ask')
+    expect(heuristicBashVerdict('htop')).toBe('ask')
+  })
+
+  it('las lecturas git siguen permitidas', () => {
+    for (const cmd of ['git stash list', 'git branch', 'git checkout feature', 'git log --oneline']) {
+      expect(heuristicBashVerdict(cmd), cmd).toBe('allow')
+    }
+  })
+})
