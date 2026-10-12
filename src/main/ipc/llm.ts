@@ -7,6 +7,7 @@ import { LLM_IPC, type LlmStreamRequest, type LlmToolCall } from '@shared/llm'
 import { buildThinkingBody, type ThinkingMode } from '@shared/thinking'
 import { accumulateToolCallDeltas, finalizedToolCalls } from '../llm/streamToolCalls'
 import { createSseParser } from '@shared/sse'
+import { getProviderKey } from '../secrets/providerKeys'
 
 import { t } from '@shared/i18n'
 interface OpenAiStreamToolCallDelta {
@@ -41,7 +42,7 @@ function isValidRequest(request: unknown): request is LlmStreamRequest {
     typeof r.baseUrl === 'string' &&
     r.baseUrl.length > 0 &&
     typeof r.model === 'string' &&
-    typeof r.apiKey === 'string' &&
+    (r.apiKey === undefined || typeof r.apiKey === 'string') &&
     (r.thinkingMode === undefined || typeof r.thinkingMode === 'string') &&
     (r.variant === undefined || typeof r.variant === 'string') &&
     (r.tools === undefined || Array.isArray(r.tools)) &&
@@ -65,6 +66,17 @@ function isValidRequest(request: unknown): request is LlmStreamRequest {
   )
 }
 
+/**
+ * B4: la key sale del store cifrado del main por `providerId`. Una key enviada
+ * por el renderer (formato anterior) solo se usa si no hay una guardada.
+ */
+function resolveApiKey(request: LlmStreamRequest): string | null {
+  const stored = getProviderKey(request.providerId)
+  if (stored) return stored
+  const legacy = request.apiKey?.trim()
+  return legacy ? legacy : null
+}
+
 /** Envía un evento al renderer si el sender sigue vivo. */
 function sendEvent(sender: WebContents, channel: string, payload: unknown): void {
   if (!sender.isDestroyed()) sender.send(channel, payload)
@@ -86,7 +98,12 @@ const IDLE_TIMEOUT_MS = 120_000
  * razonamiento (DeepSeek usa el primero, OpenRouter el segundo).
  */
 async function runStream(sender: WebContents, request: LlmStreamRequest): Promise<void> {
-  const { requestId, baseUrl, model, apiKey, headers, messages, thinkingMode, tools, variant } = request
+  const { requestId, baseUrl, model, headers, messages, thinkingMode, tools, variant } = request
+  const apiKey = resolveApiKey(request)
+  if (!apiKey) {
+    sendEvent(sender, LLM_IPC.chatStreamError, { requestId, error: t('main.falta.api.key') })
+    return
+  }
   const controller = new AbortController()
   activeStreams.set(requestId, controller)
   // Si la ventana se cierra o recarga, no hay a quién entregar el stream:

@@ -46,6 +46,7 @@
   "main.ese.usuario.ya.esta.tomado": "Ese usuario ya está tomado",
   "main.estado.demasiado.largo": "Estado demasiado largo",
   "main.este.encoding.pertenece.a.una": "Este encoding pertenece a una extensión y se convierte en el renderer. Usa writeEncodedDelegated.",
+  "main.falta.api.key": "Falta la API key de este proveedor. Agrégala en el menú de Proveedores.",
   "main.falta.la.consulta": "Falta la consulta",
   "main.falta.la.url": "Falta la URL",
   "main.falta.path": "Falta path",

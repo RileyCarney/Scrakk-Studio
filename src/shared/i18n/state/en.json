@@ -11483,6 +11483,14 @@
       "needsReview": false,
       "at": "2026-10-12T07:29:31.000Z",
       "approvedAt": "2026-10-12T07:29:31.000Z"
+    },
+    "main.falta.api.key": {
+      "src": "9f4ab85b1957e74f",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:41:35.000Z",
+      "approvedAt": "2026-10-12T07:41:35.000Z"
     }
   },
   "version": 1

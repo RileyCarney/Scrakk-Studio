@@ -83,6 +83,8 @@ export interface WindowApi {
   screenshot: import('./screenshot').ScreenshotApi
   /** Chat LLM por IPC: el fetch corre en el proceso main (sin CORS). */
   llm: LlmApi
+  /** API keys de proveedores (B4): solo guardar/borrar/listar; nunca leer el valor. */
+  secrets: import('./secrets').SecretsApi
   /** Filesystem: operaciones de archivo, proceso y búsqueda vía IPC. */
   fs: FsApi
   /** Extensiones SEF: instalar/desinstalar/listar `.sef` en userData. */

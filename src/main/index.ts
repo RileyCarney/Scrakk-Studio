@@ -6,6 +6,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { I18N_IPC } from '@shared/window-controls'
 import { setLocale } from '@shared/i18n'
 import { registerLlmIpc } from './ipc/llm'
+import { registerSecretsIpc } from './secrets/ipc'
 import { registerFsIpc } from './ipc/fs'
 import { registerWindowControlsIpc } from './ipc/window-controls'
 import { registerScreenshotIpc } from './ipc/screenshot'
@@ -92,6 +93,7 @@ if (!gotTheLock) {
     registerWindowControlsIpc()
     registerScreenshotIpc()
     registerLlmIpc()
+    registerSecretsIpc()
     registerFsIpc()
     registerExtensionsIpc()
     registerLspIpc()
