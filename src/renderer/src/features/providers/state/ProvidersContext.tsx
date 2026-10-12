@@ -238,11 +238,12 @@ export function ProvidersProvider({ children }: { children: ReactNode }) {
 
   const removeApiKey = useCallback(async (providerId: string): Promise<SecretWriteResult> => {
     const res = await window.api.secrets.deleteProviderKey(providerId)
-    if (res.ok) setKeyIds((prev) => prev.filter((id) => id !== providerId))
+    if (res.ok) {
+      setKeyIds((prev) => prev.filter((id) => id !== providerId))
+      // Si era el proveedor activo, sin key no puede chatear → se desactiva.
+      setActiveProviderId((prev) => (prev === providerId ? null : prev))
+    }
     return res
-    })
-    // Si era el proveedor activo, sin key no puede chatear → se desactiva.
-    setActiveProviderId((prev) => (prev === providerId ? null : prev))
   }, [])
 
   const setModel = useCallback((providerId: string, modelId: string) => {

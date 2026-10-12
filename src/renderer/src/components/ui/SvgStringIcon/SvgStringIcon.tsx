@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Licencia completa en LICENSE (Apache License 2.0).
 
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 
 interface SvgStringIconProps {
   /** SVG de un paquete de extensión: NO se inyecta como HTML (B19). */
@@ -15,7 +15,7 @@ interface SvgStringIconProps {
  * ejecuta scripts ni hereda CSS/eventos del documento, a diferencia de
  * `dangerouslySetInnerHTML`, que dejaba a un `.sef` inyectar HTML en la UI.
  */
-export function SvgStringIcon({ svg, className }: SvgStringIconProps): JSX.Element {
+export function SvgStringIcon({ svg, className }: SvgStringIconProps): ReactElement {
   const style: CSSProperties = { display: 'block', width: '100%', height: '100%' }
   return (
     <img

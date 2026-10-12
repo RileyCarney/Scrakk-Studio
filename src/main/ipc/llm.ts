@@ -169,6 +169,7 @@ async function runStream(sender: WebContents, request: LlmStreamRequest): Promis
       return
     }
 
+    const reader = response.body.getReader()
     const sse = createSseParser()
     let fullContent = ''
     let fullReasoning = ''

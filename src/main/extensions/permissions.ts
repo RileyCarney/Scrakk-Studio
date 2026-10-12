@@ -18,6 +18,7 @@ import { ipcMain } from 'electron'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 import { app } from 'electron'
+import { EXT_FS_IPC } from '@shared/extensions'
 import {
   checkPathAccess,
   hasPermission,
@@ -124,7 +125,7 @@ interface ScopedFsRequest {
 }
 
 export function registerExtensionFsIpc(): void {
-  ipcMain.handle('ext:fs-read', async (_event, request: ScopedFsRequest) => {
+  ipcMain.handle(EXT_FS_IPC.read, async (_event, request: ScopedFsRequest) => {
     const verdict = await checkExtensionPathAccess(request.extensionId, 'read', request.path)
     if (!verdict.allowed) {
       return { success: false, error: `[permisos] ${verdict.reason}` }
@@ -138,7 +139,7 @@ export function registerExtensionFsIpc(): void {
   })
 
   ipcMain.handle(
-    'ext:fs-write',
+    EXT_FS_IPC.write,
     async (_event, request: ScopedFsRequest & { content: string }) => {
       const target = path.resolve(request.path)
       const verdict = await checkExtensionPathAccess(request.extensionId, 'write', target)
@@ -155,7 +156,7 @@ export function registerExtensionFsIpc(): void {
     }
   )
 
-  ipcMain.handle('ext:lsp-check', async (_event, request: { extensionId: string }) => {
+  ipcMain.handle(EXT_FS_IPC.lspCheck, async (_event, request: { extensionId: string }) => {
     const declared = await getDeclaredPermissions(request.extensionId)
     return checkSimplePermission(declared, PERMISSIONS.LSP_USE)
   })
