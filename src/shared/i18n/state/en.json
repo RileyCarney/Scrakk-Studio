@@ -5288,14 +5288,6 @@
       "at": "2026-09-25T17:50:54.423Z",
       "approvedAt": "2026-09-25T17:50:58.932Z"
     },
-    "main.base.uri.none": {
-      "src": "a170a67d55bc6217",
-      "area": "main",
-      "machine": true,
-      "needsReview": false,
-      "at": "2026-09-25T17:59:23.543Z",
-      "approvedAt": "2026-09-25T17:59:30.392Z"
-    },
     "main.binario.no.encontrado": {
       "src": "60e1a8cba765920f",
       "area": "main",
@@ -5359,14 +5351,6 @@
       "needsReview": false,
       "at": "2026-09-25T17:48:43.447Z",
       "approvedAt": "2026-09-25T17:48:47.913Z"
-    },
-    "main.default.src.none": {
-      "src": "a420e766ad7ba31c",
-      "area": "main",
-      "machine": true,
-      "needsReview": false,
-      "at": "2026-09-25T17:59:23.544Z",
-      "approvedAt": "2026-09-25T17:59:30.392Z"
     },
     "main.demasiados.redirects": {
       "src": "cb61e6fb3b162c8d",
@@ -5648,14 +5632,6 @@
       "at": "2026-09-25T17:48:43.448Z",
       "approvedAt": "2026-09-25T17:48:47.914Z"
     },
-    "main.form.action.none": {
-      "src": "2d7e552b9ca1ff9b",
-      "area": "main",
-      "machine": true,
-      "needsReview": false,
-      "at": "2026-09-25T17:59:23.544Z",
-      "approvedAt": "2026-09-25T17:59:30.392Z"
-    },
     "main.formato.de.imagen.no.soportado": {
       "src": "84b31c505eef38fc",
       "area": "main",
@@ -5671,14 +5647,6 @@
       "needsReview": false,
       "at": "2026-09-25T17:48:43.448Z",
       "approvedAt": "2026-09-25T17:48:47.914Z"
-    },
-    "main.frame.src.none": {
-      "src": "caa43ebb7da65bcb",
-      "area": "main",
-      "machine": true,
-      "needsReview": false,
-      "at": "2026-09-25T17:59:23.544Z",
-      "approvedAt": "2026-09-25T17:59:30.392Z"
     },
     "main.gemfile": {
       "src": "d09ea66f8227784f",
