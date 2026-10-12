@@ -47,6 +47,8 @@ npm run dev        # development
 npm test           # test suite (Vitest)
 npm run build      # production build
 npm run dist       # installer
+npm run api        # REST API (in-memory store) — see api/README.md
+npm run api:postman  # run the Postman suite against a throwaway API
 ```
 
 ## Repository layout
@@ -56,6 +58,7 @@ npm run dist       # installer
 | `src/main` | Electron main process (FS, LSP, extensions, updates) |
 | `src/renderer` | UI (React) and the bridges into the engine |
 | `src/shared` | contracts shared by main and renderer |
+| `api/` | REST API for accounts and social + Postman test suite ([docs](./api/README.md)) |
 | `langs/` | language pack (grammars + tree-sitter queries) |
 | `tools/` | grammar CLI, pack builder, license tooling |
 | `tests/` | Vitest suite |
