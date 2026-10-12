@@ -14,7 +14,6 @@ import { t } from '@core/i18n'
 /** Entrada de un envío: el proveedor se resuelve en la UI (ProvidersProvider). */
 export interface SendMessageInput {
   provider: ProviderConfig | null
-  apiKey: string
   /** Id del modelo elegido por el usuario (fallback: defaultModel del config). */
   model: string
   /** Modo de pensamiento elegido para el modelo activo. */
@@ -71,15 +70,11 @@ function toToolCallInfo(toolCall: LlmToolCall): ToolCallInfo {
 export function createLlmChatService(): ChatService {
   return {
     sendMessage: (input): Promise<ChatReply> => {
-      const { provider, apiKey, model, thinkingMode, variant, content, history } = input
+      const { provider, model, thinkingMode, variant, content, history } = input
 
       return new Promise((resolve, reject) => {
         if (!provider) {
           reject(new Error(t('services.no.hay.proveedor.activo.abre')))
-          return
-        }
-        if (!apiKey.trim()) {
-          reject(new Error(`Falta la API key de ${provider.name}. La agregas en el menú de Proveedores.`))
           return
         }
 
@@ -121,7 +116,6 @@ export function createLlmChatService(): ChatService {
                 baseUrl: provider.baseUrl,
                 // El id exacto del modelo tal como lo espera el proveedor.
                 model: model || provider.defaultModel,
-                apiKey: apiKey.trim(),
                 headers: provider.headers,
                 messages,
                 thinkingMode,

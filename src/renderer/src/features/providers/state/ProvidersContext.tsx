@@ -12,6 +12,7 @@ import {
   type ReactNode
 } from 'react'
 import type { ThinkingMode } from '@shared/thinking'
+import type { SecretWriteResult } from '@shared/secrets'
 import { getProvider, getProviders, subscribeProviderCatalog, type ProviderConfig } from '@services/providers'
 import { PROVIDERS_STORAGE_KEY } from '../settings'
 
@@ -20,6 +21,10 @@ const STORAGE_KEY = PROVIDERS_STORAGE_KEY
 
 interface StoredProvidersState {
   activeProviderId: string | null
+  /**
+   * Solo LEGADO: keys que quedaron en localStorage antes de B4. Se migran al
+   * store cifrado del main al arrancar y luego se borran de aquí.
+   */
   apiKeys: Record<string, string>
   /** Modelo elegido por proveedor (id exacto). Vacío = defaultModel del config. */
   models: Record<string, string>
@@ -66,8 +71,8 @@ interface ProvidersContextValue {
   activeProviderId: string | null
   /** Proveedor activo resuelto (null si no hay ninguno seleccionado). */
   activeProvider: ProviderConfig | null
-  /** API key guardada de un proveedor ('' si no tiene). */
-  getApiKey: (providerId: string) => string
+  /** ¿Hay una API key guardada para el proveedor? (el valor nunca sale del main). */
+  hasApiKey: (providerId: string) => boolean
   /** Modelo elegido de un proveedor (fallback: defaultModel del config). */
   getModel: (providerId: string) => string
   /** Modo de pensamiento elegido de un proveedor (fallback: 'auto'). */
@@ -78,10 +83,10 @@ interface ProvidersContextValue {
   setVariant: (providerId: string, variant: string | null) => void
   /** Selecciona el proveedor activo (debe tener key para poder chatear). */
   selectProvider: (providerId: string) => void
-  /** Guarda la key del proveedor (persistida en localStorage). */
-  setApiKey: (providerId: string, apiKey: string) => void
+  /** Guarda la key cifrada en el main. Activa el proveedor si la guardó. */
+  setApiKey: (providerId: string, apiKey: string) => Promise<SecretWriteResult>
   /** Elimina la key guardada. */
-  removeApiKey: (providerId: string) => void
+  removeApiKey: (providerId: string) => Promise<SecretWriteResult>
   /** Guarda el modelo elegido del proveedor (persistido en localStorage). */
   setModel: (providerId: string, modelId: string) => void
   /** Guarda el modo de pensamiento del proveedor (persistido en localStorage). */
@@ -106,7 +111,10 @@ export function ProvidersProvider({ children }: { children: ReactNode }) {
     // Si el proveedor guardado ya no existe en el registro, arranca sin activo.
     stored.activeProviderId && getProvider(stored.activeProviderId) ? stored.activeProviderId : null
   )
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>(stored.apiKeys)
+  // Ids con key guardada en el main. El valor de la key nunca entra al renderer.
+  const [keyIds, setKeyIds] = useState<string[]>([])
+  // Keys legacy pendientes de migrar (se vacían cuando el main las acepta).
+  const [legacyKeys, setLegacyKeys] = useState<Record<string, string>>(stored.apiKeys)
   const [models, setModels] = useState<Record<string, string>>(stored.models)
   const [thinkingModes, setThinkingModes] = useState<Record<string, string>>(stored.thinkingModes)
   const [variants, setVariants] = useState<Record<string, string>>(stored.variants)
@@ -141,22 +149,52 @@ export function ProvidersProvider({ children }: { children: ReactNode }) {
     }
   }, [providers, activeProviderId, stored.activeProviderId])
 
-  // Persistencia: cada cambio se guarda solo.
+  // Carga de ids y migración única de keys legacy (localStorage → store cifrado).
+  // Solo se quita una key de localStorage cuando el main la guardó.
   useEffect(() => {
-    const stored: StoredProvidersState = { activeProviderId, apiKeys, models, thinkingModes, variants }
+    const secrets = window.api?.secrets
+    if (!secrets) return
+    let cancelled = false
+    void (async () => {
+      const remaining: Record<string, string> = {}
+      for (const [id, key] of Object.entries(stored.apiKeys)) {
+        if (!key.trim()) continue
+        const res = await secrets.setProviderKey(id, key).catch(() => ({ ok: false as const, reason: 'io' as const }))
+        if (!res.ok) remaining[id] = key
+      }
+      const ids = await secrets.listProviderKeys().catch(() => [] as string[])
+      if (cancelled) return
+      setLegacyKeys(remaining)
+      setKeyIds(ids)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [stored.apiKeys])
+
+  // Persistencia: cada cambio se guarda solo. Las keys van al store cifrado; las
+  // que no se pudieron migrar siguen en localStorage (no se pierden).
+  useEffect(() => {
+    const stored: StoredProvidersState = {
+      activeProviderId,
+      apiKeys: legacyKeys,
+      models,
+      thinkingModes,
+      variants
+    }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(stored))
     } catch {
       // Almacenamiento no disponible: se sigue en memoria nomás.
     }
-  }, [activeProviderId, apiKeys, models, thinkingModes, variants])
+  }, [activeProviderId, legacyKeys, models, thinkingModes, variants])
 
   const activeProvider = useMemo(
     () => (activeProviderId ? getProvider(activeProviderId) : null),
     [activeProviderId, providers]
   )
 
-  const getApiKey = useCallback((providerId: string): string => apiKeys[providerId] ?? '', [apiKeys])
+  const hasApiKey = useCallback((providerId: string): boolean => keyIds.includes(providerId), [keyIds])
 
   const getModel = useCallback(
     (providerId: string): string => {
@@ -187,17 +225,21 @@ export function ProvidersProvider({ children }: { children: ReactNode }) {
     setActiveProviderId(providerId)
   }, [])
 
-  const setApiKey = useCallback((providerId: string, apiKey: string) => {
+  const setApiKey = useCallback(async (providerId: string, apiKey: string): Promise<SecretWriteResult> => {
     const key = apiKey.trim()
-    setApiKeys((prev) => ({ ...prev, [providerId]: key }))
-    if (key) setActiveProviderId(providerId)
+    if (!key) return { ok: false, reason: 'io' }
+    const res = await window.api.secrets.setProviderKey(providerId, key)
+    if (res.ok) {
+      setKeyIds((prev) => (prev.includes(providerId) ? prev : [...prev, providerId]))
+      setActiveProviderId(providerId)
+    }
+    return res
   }, [])
 
-  const removeApiKey = useCallback((providerId: string) => {
-    setApiKeys((prev) => {
-      const next = { ...prev }
-      delete next[providerId]
-      return next
+  const removeApiKey = useCallback(async (providerId: string): Promise<SecretWriteResult> => {
+    const res = await window.api.secrets.deleteProviderKey(providerId)
+    if (res.ok) setKeyIds((prev) => prev.filter((id) => id !== providerId))
+    return res
     })
     // Si era el proveedor activo, sin key no puede chatear → se desactiva.
     setActiveProviderId((prev) => (prev === providerId ? null : prev))
@@ -237,7 +279,7 @@ export function ProvidersProvider({ children }: { children: ReactNode }) {
       providers,
       activeProviderId,
       activeProvider,
-      getApiKey,
+      hasApiKey,
       getModel,
       getThinkingMode,
       getVariant,
@@ -255,7 +297,7 @@ export function ProvidersProvider({ children }: { children: ReactNode }) {
       providers,
       activeProviderId,
       activeProvider,
-      getApiKey,
+      hasApiKey,
       getModel,
       getThinkingMode,
       getVariant,

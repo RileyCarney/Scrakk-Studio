@@ -13,7 +13,7 @@
  *    mismo sistema de drag de la ActivityBar).
  */
 
-import { SvgStringIcon } from '@ui/SvgStringIcon/SvgStringIcon'
+import { SvgStringIcon } from '@ui'
 import {
   useCallback,
   useEffect,

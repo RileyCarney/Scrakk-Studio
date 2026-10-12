@@ -5,6 +5,7 @@
 export { IconButton } from './IconButton/IconButton'
 export { ToggleSwitch } from './ToggleSwitch/ToggleSwitch'
 export { LoadingBar } from './LoadingBar/LoadingBar'
+export { SvgStringIcon } from './SvgStringIcon/SvgStringIcon'
 export { LoadingBorder } from './LoadingBorder/LoadingBorder'
 export { LoadingButton } from './LoadingButton/LoadingButton'
 export { Modal, type ModalSize } from './Modal/Modal'

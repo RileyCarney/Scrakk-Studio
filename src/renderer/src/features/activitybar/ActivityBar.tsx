@@ -15,7 +15,7 @@
  * instalarse o quitarse extensiones.
  */
 
-import { SvgStringIcon } from '@ui/SvgStringIcon/SvgStringIcon'
+import { SvgStringIcon } from '@ui'
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { preloadPanel, useLayout } from '@features/layout'
 import { ExtensionRegistry } from '@services/extensions'
