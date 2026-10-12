@@ -327,14 +327,17 @@ export function registerFsIpc(): void {
         exitCode: 0
       }
     } catch (error: any) {
-      // execAsync throws on non-zero exit code
-      if (error.code !== undefined) {
+      // execAsync rechaza en exit distinto de 0. Solo `code` numérico es un exit
+      // code real: ENOENT (cwd inexistente) o ERR_CHILD_PROCESS_STDIO_MAXBUFFER
+      // son strings y antes se devolvían como exitCode (B10).
+      const timedOut = error.killed === true && error.signal === 'SIGTERM'
+      if (typeof error.code === 'number') {
         return {
           success: false,
           stdout: error.stdout ?? '',
           stderr: error.stderr ?? '',
-          exitCode: error.code ?? 1,
-          timedOut: error.killed === true && error.signal === 'SIGTERM'
+          exitCode: error.code,
+          timedOut
         }
       }
       const msg = error instanceof Error ? error.message : String(error)
@@ -342,7 +345,8 @@ export function registerFsIpc(): void {
         success: false,
         stdout: '',
         stderr: msg,
-        exitCode: 1
+        exitCode: 1,
+        timedOut
       }
     }
   })

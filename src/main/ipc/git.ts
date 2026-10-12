@@ -140,7 +140,7 @@ function emptyRepoAs<T>(empty: T): (res: { ok: boolean; stderr: string }) => Git
   }
 }
 
-function mapFailure<T>(res: RunFail, context: string): GitResult<T> {
+export function mapFailure<T>(res: RunFail, context: string): GitResult<T> {
   const stderr = scrub(res.stderr).trim()
   const tail = stderr.split('\n').slice(-3).join(' ').slice(0, 300)
   if (res.timedOut) return fail('timeout', `${context}: tiempo agotado`)
@@ -148,7 +148,7 @@ function mapFailure<T>(res: RunFail, context: string): GitResult<T> {
     return fail('not-a-repo', t('main.no.es.un.repositorio.git'))
   }
   if (
-    /authentication failed|could not read username|permission denied|401|403|invalid credentials|logon failed/i.test(
+    /authentication failed|could not read username|permission denied|returned error: 40[13]\b|\bHTTP(?:\/[\d.]+)? 40[13]\b|invalid credentials|logon failed/i.test(
       stderr
     )
   ) {
@@ -173,11 +173,13 @@ function resolveCwd(cwd: string): string | null {
 }
 
 /** Un path de archivo debe vivir dentro del cwd (anti traversal). */
-function resolveInRepo(cwd: string, rel: string): string | null {
+export function resolveInRepo(cwd: string, rel: string): string | null {
   if (typeof rel !== 'string' || !rel || rel.includes('\0')) return null
   const abs = path.normalize(path.join(cwd, rel))
   const relative = path.relative(cwd, abs)
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null
+  // `..env.local` es un archivo legítimo: solo escapa si es `..` o empieza por `../`.
+  const escapes = relative === '..' || relative.startsWith('..' + path.sep)
+  if (!relative || escapes || path.isAbsolute(relative)) return null
   return relative
 }
 
@@ -199,10 +201,12 @@ function isSafeUrl(url: string): boolean {
   return /^(https?:\/\/|ssh:\/\/|git@[^:]+:)/.test(url)
 }
 
-let gitBinary: boolean | null = null
+// Solo se cachea el éxito: si git no estaba y el usuario lo instala con la app
+// abierta, debe detectarse sin reiniciar (B15).
+let gitBinary = false
 
 async function hasGit(): Promise<boolean> {
-  if (gitBinary !== null) return gitBinary
+  if (gitBinary) return true
   try {
     const res = await run('git', ['--version'], undefined, { timeoutMs: 8000 })
     gitBinary = res.ok
