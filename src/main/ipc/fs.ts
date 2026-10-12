@@ -64,6 +64,12 @@ interface WatchEntry {
 
 const watchers = new Map<string, WatchEntry>()
 
+/** Carpetas que la búsqueda de archivos y de texto nunca recorre (B22: una sola fuente). */
+const EXCLUDED_DIRS = new Set([
+  'node_modules', '.git', 'dist', '.next', '.nuxt', '.output',
+  '__pycache__', '.venv', 'venv', '.cache', '.turbo', 'coverage'
+])
+
 /** Tope por defecto de lectura de texto (50 MB). */
 const DEFAULT_MAX_READ_BYTES = 50 * 1024 * 1024
 
@@ -407,10 +413,6 @@ export function registerFsIpc(): void {
         ? req.excludePattern.split(',').map(s => s.trim().toLowerCase())
         : []
 
-      const EXCLUDED_DIRS = new Set([
-        'node_modules', '.git', 'dist', '.next', '.nuxt', '.output',
-        '__pycache__', '.venv', 'venv', '.cache', '.turbo', 'coverage'
-      ])
 
       async function search(dir: string, relativeBase: string): Promise<void> {
         if (results.length >= maxResults) return
@@ -475,18 +477,15 @@ export function registerFsIpc(): void {
       const includePattern = req.includePattern?.toLowerCase()
       const maxFileSize = req.maxFileSize ?? 1024 * 1024 // 1MB default
 
-      const EXCLUDED_DIRS = new Set([
-        'node_modules', '.git', 'dist', '.next', '.nuxt', '.output',
-        '__pycache__', '.venv', 'venv', '.cache', '.turbo', 'coverage'
-      ])
 
       const TEXT_EXTENSIONS = new Set([
         '.ts', '.tsx', '.js', '.jsx', '.json', '.md', '.txt', '.css', '.scss',
         '.html', '.vue', '.svelte', '.py', '.rb', '.go', '.rs', '.java',
         '.c', '.cpp', '.h', '.hpp', '.sh', '.bash', '.zsh', '.fish',
-        '.yaml', '.yml', '.toml', '.xml', '.sql', '.graphql', '.prisma',
-        '.env', '.gitignore', '.dockerignore', '.editorconfig'
+        '.yaml', '.yml', '.toml', '.xml', '.sql', '.graphql', '.prisma'
       ])
+      // Los archivos con nombre que empieza con punto (`.env`, `.gitignore`) se
+      // omiten arriba: no se buscan (B22).
 
       async function grep(dir: string): Promise<void> {
         if (matches.length >= maxResults) return

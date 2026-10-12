@@ -72,6 +72,7 @@
   "main.git.no.esta.instalado.o": "git no está instalado o no está en el PATH",
   "main.git.reflog": "git reflog",
   "main.git.reset": "git reset",
+  "main.git.tiempo.agotado": "{contexto}: tiempo agotado",
   "main.git.version": "git --version",
   "main.head.invalido": "Head inválido",
   "main.host.invalido": "Host inválido",
@@ -160,5 +161,10 @@
   "main.utf.16.le.con.bom": "UTF-16 LE con BOM",
   "main.utf.8.con.bom": "UTF-8 con BOM",
   "main.vs.code.extension": "VS Code Extension",
+  "main.web.direccion.bloqueada": "Dirección bloqueada (SSRF): {host}",
+  "main.web.host.bloqueado": "Host bloqueado (SSRF): {host} → {address}",
+  "main.web.host.sin.resolver": "No se pudo resolver el host: {host}",
+  "main.web.redirect.sin.destino": "Redirect sin destino ({status})",
+  "main.web.sitio.respondio": "El sitio respondió {status}",
   "main.western.windows.1252": "Western (Windows 1252)"
 }

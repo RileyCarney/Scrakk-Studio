@@ -17,6 +17,7 @@
 
 import { isIP } from 'node:net'
 import { lookup } from 'node:dns/promises'
+import { t } from '@shared/i18n'
 
 /** IPv4 bloqueada (loopback se permite para dev local). */
 function isBlockedV4(ip: string): boolean {
@@ -80,11 +81,11 @@ export async function assertPublicHost(hostRaw: string): Promise<void> {
   // falla y una IPv6 pública nunca se podía pedir (B16).
   const host = hostRaw.startsWith('[') && hostRaw.endsWith(']') ? hostRaw.slice(1, -1) : hostRaw
   if (isIP(host)) {
-    if (isBlockedIp(host)) throw new Error(`Dirección bloqueada (SSRF): ${host}`)
+    if (isBlockedIp(host)) throw new Error(t('main.web.direccion.bloqueada', { host }))
     return
   }
   const addrs = await lookup(host, { all: true, verbatim: true }).catch(() => [])
-  if (addrs.length === 0) throw new Error(`No se pudo resolver el host: ${host}`)
+  if (addrs.length === 0) throw new Error(t('main.web.host.sin.resolver', { host }))
   const blocked = addrs.find((entry) => isBlockedIp(entry.address))
-  if (blocked) throw new Error(`Host bloqueado (SSRF): ${host} → ${blocked.address}`)
+  if (blocked) throw new Error(t('main.web.host.bloqueado', { host, address: blocked.address }))
 }

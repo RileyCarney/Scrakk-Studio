@@ -56,12 +56,12 @@ export async function fetchUrl(rawUrl: string): Promise<WebFetchResponse> {
 
       if (REDIRECT_STATUS.has(response.status)) {
         const location = response.headers.get('location')
-        if (!location) throw new Error(`Redirect sin destino (${response.status})`)
+        if (!location) throw new Error(t('main.web.redirect.sin.destino', { status: response.status }))
         current = normalizeUrl(new URL(location, current).toString())
         continue
       }
 
-      if (!response.ok) throw new Error(`El sitio respondió ${response.status}`)
+      if (!response.ok) throw new Error(t('main.web.sitio.respondio', { status: response.status }))
 
       const contentType = response.headers.get('content-type') ?? ''
       const bytes = Buffer.from(await response.arrayBuffer()).subarray(0, MAX_BYTES)

@@ -143,7 +143,7 @@ function emptyRepoAs<T>(empty: T): (res: { ok: boolean; stderr: string }) => Git
 export function mapFailure<T>(res: RunFail, context: string): GitResult<T> {
   const stderr = scrub(res.stderr).trim()
   const tail = stderr.split('\n').slice(-3).join(' ').slice(0, 300)
-  if (res.timedOut) return fail('timeout', `${context}: tiempo agotado`)
+  if (res.timedOut) return fail('timeout', t('main.git.tiempo.agotado', { contexto: context }))
   if (/not a git repository|not a git repo/i.test(stderr)) {
     return fail('not-a-repo', t('main.no.es.un.repositorio.git'))
   }
