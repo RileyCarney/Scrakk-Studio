@@ -37,12 +37,17 @@ export const FS_IPC = {
 
 export interface ReadFileRequest {
   path: string
+  /** Tope de tamaño; por defecto 50 MB. Evita cargar logs o binarios enormes (B21). */
+  maxBytes?: number
 }
 
 export interface ReadFileResponse {
   success: boolean
   content?: string
   error?: string
+  /** `too-large`: el archivo supera `maxBytes`; el editor puede ofrecer abrirlo parcialmente. */
+  code?: 'too-large'
+  size?: number
 }
 
 /**

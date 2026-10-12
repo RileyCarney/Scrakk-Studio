@@ -64,6 +64,9 @@ interface WatchEntry {
 
 const watchers = new Map<string, WatchEntry>()
 
+/** Tope por defecto de lectura de texto (50 MB). */
+const DEFAULT_MAX_READ_BYTES = 50 * 1024 * 1024
+
 function watchKey(senderId: number, path: string): string {
   return `${senderId}:${path}`
 }
@@ -76,6 +79,26 @@ function closeWatcher(key: string, entry: WatchEntry): void {
     // Ya cerrado.
   }
   watchers.delete(key)
+}
+
+/**
+ * Guardado atómico (B23): se escribe a un temporal en el mismo directorio y se
+ * renombra encima. Un corte a mitad deja el archivo original intacto, en vez de
+ * truncarlo. Se conserva el modo, y si el destino es un symlink se escribe el
+ * archivo real y no el enlace.
+ */
+async function writeAtomic(target: string, content: string): Promise<void> {
+  const real = await fs.realpath(target).catch(() => target)
+  const mode = await fs.stat(real).then((s) => s.mode & 0o777).catch(() => undefined)
+  const tmp = path.join(path.dirname(real), `.${path.basename(real)}.${process.pid}.${Date.now()}.tmp`)
+  try {
+    await fs.writeFile(tmp, content, { encoding: 'utf-8', mode: mode ?? 0o666 })
+    if (mode !== undefined) await fs.chmod(tmp, mode)
+    await fs.rename(tmp, real)
+  } catch (error) {
+    await fs.rm(tmp, { force: true }).catch(() => undefined)
+    throw error
+  }
 }
 
 /** Registra todos los handlers IPC del filesystem. */
@@ -98,6 +121,11 @@ export function registerFsIpc(): void {
   ipcMain.handle(FS_IPC.readFile, async (_event, request: unknown): Promise<ReadFileResponse> => {
     const req = request as ReadFileRequest
     try {
+      const maxBytes = req.maxBytes ?? DEFAULT_MAX_READ_BYTES
+      const { size } = await fs.stat(req.path)
+      if (size > maxBytes) {
+        return { success: false, code: 'too-large', size, error: t('main.archivo.demasiado.grande') }
+      }
       const content = await fs.readFile(req.path, 'utf-8')
       return { success: true, content }
     } catch (error) {
@@ -131,7 +159,7 @@ export function registerFsIpc(): void {
     try {
       // Crear directorios padre si no existen
       await fs.mkdir(path.dirname(req.path), { recursive: true })
-      await fs.writeFile(req.path, req.content, 'utf-8')
+      await writeAtomic(req.path, req.content)
       return { success: true }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
@@ -243,6 +271,16 @@ export function registerFsIpc(): void {
     }
 
     watchers.set(key, { watcher, sender: event.sender })
+    // Un error del watcher (carpeta borrada, EPERM en Windows) sin listener
+    // tumbaba el proceso principal. Se cierra y se avisa al renderer (B5).
+    watcher.on('error', () => {
+      const entry = watchers.get(key)
+      if (!entry) return
+      closeWatcher(key, entry)
+      if (!entry.sender.isDestroyed()) {
+        entry.sender.send(FS_IPC.watchChanged, { path: dirPath } satisfies WatchDirRequest)
+      }
+    })
     // Limpieza automática si la ventana muere con watchers activos.
     event.sender.once('destroyed', () => {
       const entry = watchers.get(key)
