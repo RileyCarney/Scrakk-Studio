@@ -6,6 +6,7 @@ import { ipcMain, type WebContents } from 'electron'
 import { LLM_IPC, type LlmStreamRequest, type LlmToolCall } from '@shared/llm'
 import { buildThinkingBody, type ThinkingMode } from '@shared/thinking'
 import { accumulateToolCallDeltas, finalizedToolCalls } from '../llm/streamToolCalls'
+import { createSseParser } from '@shared/sse'
 
 import { t } from '@shared/i18n'
 interface OpenAiStreamToolCallDelta {
@@ -23,6 +24,8 @@ interface OpenAiStreamDelta {
 
 interface OpenAiStreamChunk {
   choices?: Array<{ delta?: OpenAiStreamDelta }>
+  /** Algunos proveedores mandan el error DENTRO del stream, con HTTP 200 (B11). */
+  error?: { message?: string } | string
 }
 
 /**
@@ -86,6 +89,9 @@ async function runStream(sender: WebContents, request: LlmStreamRequest): Promis
   const { requestId, baseUrl, model, apiKey, headers, messages, thinkingMode, tools, variant } = request
   const controller = new AbortController()
   activeStreams.set(requestId, controller)
+  // Si la ventana se cierra o recarga, no hay a quién entregar el stream:
+  // se corta el fetch en vez de seguir consumiendo al proveedor (B11).
+  sender.once('destroyed', () => controller.abort())
   let idleTimedOut = false
   let connectTimedOut = false
 
@@ -131,7 +137,10 @@ async function runStream(sender: WebContents, request: LlmStreamRequest): Promis
       const detail = body.slice(0, 300)
       sendEvent(sender, LLM_IPC.chatStreamError, {
         requestId,
-        error: `El proveedor respondió ${response.status}${detail ? `: ${detail}` : ''}`
+        error: t('main.el.proveedor.respondio.status', {
+          status: response.status,
+          detalle: detail ? `: ${detail}` : ''
+        })
       })
       return
     }
@@ -143,10 +152,7 @@ async function runStream(sender: WebContents, request: LlmStreamRequest): Promis
       return
     }
 
-    // Parseo SSE: líneas "data: {json}" separadas por \n.
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
+    const sse = createSseParser()
     let fullContent = ''
     let fullReasoning = ''
     // Tool calls del stream, acumuladas por índice (los deltas traen los
@@ -189,46 +195,60 @@ async function runStream(sender: WebContents, request: LlmStreamRequest): Promis
       }
     }
 
+    /** Procesa un payload `data:`. Devuelve false si el proveedor reportó un error. */
+    const handlePayload = (payload: string): boolean => {
+      let chunk: OpenAiStreamChunk
+      try {
+        chunk = JSON.parse(payload) as OpenAiStreamChunk
+      } catch {
+        return true
+      }
+      if (chunk.error) {
+        const message = typeof chunk.error === 'string' ? chunk.error : chunk.error.message ?? ''
+        sendEvent(sender, LLM_IPC.chatStreamError, {
+          requestId,
+          error: t('main.el.proveedor.devolvio.error', { detalle: message || t('main.desconocido') })
+        })
+        return false
+      }
+      const delta = chunk.choices?.[0]?.delta
+      if (!delta) return true
+      const reasoningDelta = delta.reasoning_content ?? delta.reasoning
+      if (typeof reasoningDelta === 'string' && reasoningDelta) {
+        fullReasoning += reasoningDelta
+        sendEvent(sender, LLM_IPC.chatStreamReasoning, { requestId, delta: reasoningDelta })
+      }
+      if (typeof delta.content === 'string' && delta.content) {
+        fullContent += delta.content
+        sendEvent(sender, LLM_IPC.chatStreamChunk, { requestId, delta: delta.content })
+      }
+      if (Array.isArray(delta.tool_calls)) {
+        // Identidad por `id`, no por `index` (ver streamToolCalls.ts).
+        accumulateToolCallDeltas(streamedToolCalls, delta.tool_calls)
+        // Emisión INCREMENTAL (throttle ~50ms): la tool card se pinta
+        // mientras el modelo la emite, no recién al terminar el stream.
+        const now = Date.now()
+        if (now - lastToolEmit > 50) {
+          lastToolEmit = now
+          emitToolCalls()
+        }
+      }
+      return true
+    }
+
     while (true) {
       const { done, value } = await readWithIdleTimeout()
       if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed.startsWith('data:')) continue
-        const payload = trimmed.slice(5).trim()
-        if (!payload || payload === '[DONE]') continue
-        let chunk: OpenAiStreamChunk
-        try {
-          chunk = JSON.parse(payload) as OpenAiStreamChunk
-        } catch {
-          continue
-        }
-        const delta = chunk.choices?.[0]?.delta
-        if (!delta) continue
-        const reasoningDelta = delta.reasoning_content ?? delta.reasoning
-        if (typeof reasoningDelta === 'string' && reasoningDelta) {
-          fullReasoning += reasoningDelta
-          sendEvent(sender, LLM_IPC.chatStreamReasoning, { requestId, delta: reasoningDelta })
-        }
-        if (typeof delta.content === 'string' && delta.content) {
-          fullContent += delta.content
-          sendEvent(sender, LLM_IPC.chatStreamChunk, { requestId, delta: delta.content })
-        }
-        if (Array.isArray(delta.tool_calls)) {
-          // Identidad por `id`, no por `index` (ver streamToolCalls.ts).
-          accumulateToolCallDeltas(streamedToolCalls, delta.tool_calls)
-          // Emisión INCREMENTAL (throttle ~50ms): la tool card se pinta
-          // mientras el modelo la emite, no recién al terminar el stream.
-          const now = Date.now()
-          if (now - lastToolEmit > 50) {
-            lastToolEmit = now
-            emitToolCalls()
-          }
+      for (const payload of sse.push(value!)) {
+        if (!handlePayload(payload)) {
+          await reader.cancel().catch(() => undefined)
+          return
         }
       }
+    }
+    // El último `data:` puede llegar sin `\n` final: no se descarta.
+    for (const payload of sse.flush()) {
+      if (!handlePayload(payload)) return
     }
 
     emitToolCalls()
@@ -269,7 +289,7 @@ async function runStream(sender: WebContents, request: LlmStreamRequest): Promis
       const message = error instanceof Error ? error.message : String(error)
       sendEvent(sender, LLM_IPC.chatStreamError, {
         requestId,
-        error: `No se pudo conectar con el proveedor: ${message}`
+        error: t('main.no.se.pudo.conectar.proveedor', { motivo: message })
       })
     }
   } finally {
@@ -280,6 +300,10 @@ async function runStream(sender: WebContents, request: LlmStreamRequest): Promis
 export function registerLlmIpc(): void {
   ipcMain.handle(LLM_IPC.chatStreamStart, (event, request: unknown) => {
     if (!isValidRequest(request)) {
+      return { ok: false, error: t('main.request.invalido') }
+    }
+    // Dos streams con el mismo id pisarían el AbortController del primero.
+    if (activeStreams.has(request.requestId)) {
       return { ok: false, error: t('main.request.invalido') }
     }
     // Arranca el stream en background; los deltas llegan por eventos.
