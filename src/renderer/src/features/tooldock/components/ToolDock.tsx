@@ -13,6 +13,7 @@
  *    mismo sistema de drag de la ActivityBar).
  */
 
+import { SvgStringIcon } from '@ui'
 import {
   useCallback,
   useEffect,
@@ -351,7 +352,7 @@ function ButtonIcon({ entry }: { entry: DockEntry }): JSX.Element {
   }
   const icon = entry.button.icon
   return typeof icon === 'string' ? (
-    <span className={styles.buttonSvg} dangerouslySetInnerHTML={{ __html: icon }} />
+    <SvgStringIcon className={styles.buttonSvg} svg={icon} />
   ) : (
     (() => {
       const Icon = icon

@@ -30,6 +30,8 @@ directories:
   buildResources: build-resources
 
 asar: true
+# A8: fuses de seguridad de Electron (ver build/afterPack.cjs).
+afterPack: build/afterPack.cjs
 # Fuera del asar: todo lo que el sistema operativo tiene que abrir como ARCHIVO
 # REAL, no como ruta virtual del archivo.
 #  - los .node (nativos) no pueden ejecutarse desde adentro del asar;

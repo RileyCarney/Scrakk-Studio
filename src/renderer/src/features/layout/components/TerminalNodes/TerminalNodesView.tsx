@@ -579,9 +579,14 @@ export function TerminalNodesView({ onBack }: { onBack: () => void }): JSX.Eleme
     if (anim.raf === null) anim.raf = requestAnimationFrame(groupTick)
   }, [groupTick])
 
+  // B20: pointerup y pointercancel se quitan JUNTOS. Con `once` el que no
+  // disparaba quedaba registrado y, en un gesto posterior no relacionado, cerraba
+  // el arrastre viejo.
   const endGrab = useCallback((): void => {
     grabRef.current = null
     window.removeEventListener('pointermove', onGrabWindowMove)
+    window.removeEventListener('pointerup', endGrab)
+    window.removeEventListener('pointercancel', endGrab)
     document.body.style.cursor = ''
     // El rAF sigue hasta asentar (con overshoot) y commitea solo.
   }, [onGrabWindowMove])
@@ -592,6 +597,8 @@ export function TerminalNodesView({ onBack }: { onBack: () => void }): JSX.Eleme
       if (grabRef.current) {
         grabRef.current = null
         window.removeEventListener('pointermove', onGrabWindowMove)
+        window.removeEventListener('pointerup', endGrab)
+        window.removeEventListener('pointercancel', endGrab)
         document.body.style.cursor = ''
       }
       if (groupAnim.current?.raf !== null && groupAnim.current?.raf !== undefined) {
@@ -599,7 +606,7 @@ export function TerminalNodesView({ onBack }: { onBack: () => void }): JSX.Eleme
       }
       groupAnim.current = null
     },
-    [onGrabWindowMove]
+    [onGrabWindowMove, endGrab]
   )
 
   const onGrabberPointerDown = (e: ReactPointerEvent<HTMLDivElement>, members: string[]): void => {
@@ -622,8 +629,8 @@ export function TerminalNodesView({ onBack }: { onBack: () => void }): JSX.Eleme
       }
       document.body.style.cursor = 'grabbing'
       window.addEventListener('pointermove', onGrabWindowMove)
-      window.addEventListener('pointerup', endGrab, { once: true })
-      window.addEventListener('pointercancel', endGrab, { once: true })
+      window.addEventListener('pointerup', endGrab)
+      window.addEventListener('pointercancel', endGrab)
       return
     }
     // Semilla física desde lo VISIBLE (puede haber un settle en curso de un
@@ -644,8 +651,8 @@ export function TerminalNodesView({ onBack }: { onBack: () => void }): JSX.Eleme
     }
     document.body.style.cursor = 'grabbing'
     window.addEventListener('pointermove', onGrabWindowMove)
-    window.addEventListener('pointerup', endGrab, { once: true })
-    window.addEventListener('pointercancel', endGrab, { once: true })
+    window.addEventListener('pointerup', endGrab)
+    window.addEventListener('pointercancel', endGrab)
   }
 
   const closeNode = (tab: TabSpec): void => {

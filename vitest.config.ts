@@ -27,6 +27,8 @@ export default defineConfig({
       { find: '@shared', replacement: r('src/shared') }
     ]
   },
+  // JSX de React 19 sin importar React en cada archivo (los tests de componentes).
+  esbuild: { jsx: 'automatic' },
   // Define de build que el engine Innerta lee en import-time; sin esto
   // cualquier test que toque la cadena del editor muere con ReferenceError.
   define: {
@@ -34,8 +36,21 @@ export default defineConfig({
     __BUILD_ID__: JSON.stringify('test')
   },
   test: {
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.{ts,tsx}'],
     testTimeout: 20_000,
-    hookTimeout: 20_000
+    hookTimeout: 20_000,
+    // T4: suelo por área, medido al introducirlo. Solo se sube, nunca se baja.
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts'],
+      reporter: ['text-summary', 'json-summary'],
+      thresholds: {
+        'src/main/ipc/**': { lines: 19 },
+        'src/main/web/**': { lines: 26 },
+        'src/main/secrets/**': { lines: 75 },
+        'src/renderer/src/services/ai/policy/**': { lines: 58 },
+        'src/shared/**': { lines: 85 }
+      }
+    }
   }
 })

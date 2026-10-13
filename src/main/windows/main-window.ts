@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Licencia completa en LICENSE (Apache License 2.0).
 
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { existsSync } from 'node:fs'
-import { app, BrowserWindow, shell } from 'electron'
+import { fileURLToPath } from 'node:url'
+import { app, BrowserWindow, session, shell } from 'electron'
 import { WINDOW_CONTROLS_IPC } from '@shared/window-controls'
+import { logError } from '../log'
 
 import { t } from '@shared/i18n'
 /** Debe coincidir con --titlebar-height en core/theme/tokens.css. */
@@ -42,6 +44,39 @@ export function isAppLocalUrl(url: string): boolean {
   } catch {
     return false
   }
+}
+
+/** Carpeta del renderer empaquetado: solo sus archivos son navegables en la ventana. */
+const rendererDir = join(__dirname, '../renderer')
+
+/**
+ * B24: la ventana de la app solo puede navegar a su propio origen (dev server o
+ * su index.html empaquetado). Cualquier otra navegación (`file:` ajeno,
+ * `scrakk-ext:`, `data:`, `javascript:`) se bloquea. Las http(s) se abren fuera
+ * desde el handler de `will-navigate`.
+ */
+export function isAllowedNavigation(url: string): boolean {
+  if (isAppLocalUrl(url)) return true
+  try {
+    const target = new URL(url)
+    if (target.protocol !== 'file:') return false
+    const file = fileURLToPath(target)
+    return file === rendererDir || file.startsWith(rendererDir + sep)
+  } catch {
+    return false
+  }
+}
+
+/** A8: permisos del renderer denegados por defecto; solo lo que la app usa. */
+const ALLOWED_PERMISSIONS = new Set<string>(['clipboard-sanitized-write'])
+
+/** Handler de permisos de la sesión: deniega todo lo que no esté en la lista. */
+export function installPermissionPolicy(): void {
+  const ses = session.defaultSession
+  ses.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(ALLOWED_PERMISSIONS.has(permission))
+  })
+  ses.setPermissionCheckHandler((_webContents, permission) => ALLOWED_PERMISSIONS.has(permission))
 }
 
 /**
@@ -114,6 +149,19 @@ export function createMainWindow(): BrowserWindow {
       }
     })
   }
+
+  // B7: si el renderer muere (crash, OOM, killed) la ventana quedaba en blanco
+  // para siempre. Se recarga; con tope para no entrar en bucle si el crash se repite.
+  let recentReloads: number[] = []
+  window.webContents.on('render-process-gone', (_event, details) => {
+    logError('window', `renderer caído: ${details.reason} (exit ${details.exitCode})`)
+    if (details.reason === 'clean-exit' || window.isDestroyed()) return
+    const now = Date.now()
+    recentReloads = recentReloads.filter((at) => now - at < 60_000)
+    if (recentReloads.length >= 3) return
+    recentReloads.push(now)
+    window.webContents.reload()
+  })
 
   // Notificar al renderer los cambios de maximizado (ícono max/restore).
   const notifyMaximized = (): void => {

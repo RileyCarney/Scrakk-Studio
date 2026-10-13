@@ -46,6 +46,7 @@ import {
 import { WINDOW_CONTROLS_IPC, I18N_IPC, type WindowApi } from '@shared/window-controls'
 import { SCREENSHOT_IPC } from '@shared/screenshot'
 import { ACCOUNT_IPC } from '@shared/account'
+import { SECRETS_IPC, type SecretsApi } from '@shared/secrets'
 import { MODELS_DEV_IPC, type ModelsDevCatalog } from '@shared/modelsDev'
 import { WEB_IPC, type WebFetchRequest, type WebSearchRequest } from '@shared/web'
 import {
@@ -112,7 +113,15 @@ import {
  * Preload: puente seguro renderer ↔ main.
  * El renderer corre con contextIsolation + sandbox, sin nodeIntegration.
  */
+const secretsApi: SecretsApi = {
+  setProviderKey: (providerId, apiKey) =>
+    ipcRenderer.invoke(SECRETS_IPC.setProviderKey, providerId, apiKey),
+  deleteProviderKey: (providerId) => ipcRenderer.invoke(SECRETS_IPC.deleteProviderKey, providerId),
+  listProviderKeys: () => ipcRenderer.invoke(SECRETS_IPC.listProviderKeys)
+}
+
 const api: WindowApi = {
+  secrets: secretsApi,
   i18n: {
     setLocale: (locale) => ipcRenderer.send(I18N_IPC.setLocale, locale)
   },

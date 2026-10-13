@@ -25,7 +25,7 @@ export function ProvidersPanel(): JSX.Element {
   const {
     providers,
     activeProviderId,
-    getApiKey,
+    hasApiKey,
     getModel,
     selectProvider,
     setApiKey,
@@ -54,15 +54,18 @@ export function ProvidersPanel(): JSX.Element {
     if (editingId) setModel(editingId, modelDraft.trim())
 
     setEditingId(editingId === providerId ? null : providerId)
-    if (getApiKey(providerId)) selectProvider(providerId)
+    if (hasApiKey(providerId)) selectProvider(providerId)
     setKeyDraft('')
     setModelDraft(getModel(providerId))
   }
 
   const handleSaveKey = (providerId: string): void => {
     if (!keyDraft.trim()) return
-    setApiKey(providerId, keyDraft)
-    setEditingId(null)
+    // La key viaja al main y se cifra; el draft se borra en cuanto sale.
+    void setApiKey(providerId, keyDraft).then((res) => {
+      setKeyDraft('')
+      if (res.ok) setEditingId(null)
+    })
   }
 
   const handleSaveModel = (providerId: string): void => {
@@ -90,7 +93,7 @@ export function ProvidersPanel(): JSX.Element {
       <ul className={styles.list}>
         {filtered.map((provider) => {
           const isActive = provider.id === activeProviderId
-          const hasKey = Boolean(getApiKey(provider.id))
+          const hasKey = hasApiKey(provider.id)
           const isEditing = editingId === provider.id
           return (
             <li key={provider.id}>

@@ -5288,14 +5288,6 @@
       "at": "2026-09-25T17:50:54.423Z",
       "approvedAt": "2026-09-25T17:50:58.932Z"
     },
-    "main.base.uri.none": {
-      "src": "a170a67d55bc6217",
-      "area": "main",
-      "machine": true,
-      "needsReview": false,
-      "at": "2026-09-25T17:59:23.543Z",
-      "approvedAt": "2026-09-25T17:59:30.392Z"
-    },
     "main.binario.no.encontrado": {
       "src": "60e1a8cba765920f",
       "area": "main",
@@ -5359,14 +5351,6 @@
       "needsReview": false,
       "at": "2026-09-25T17:48:43.447Z",
       "approvedAt": "2026-09-25T17:48:47.913Z"
-    },
-    "main.default.src.none": {
-      "src": "a420e766ad7ba31c",
-      "area": "main",
-      "machine": true,
-      "needsReview": false,
-      "at": "2026-09-25T17:59:23.544Z",
-      "approvedAt": "2026-09-25T17:59:30.392Z"
     },
     "main.demasiados.redirects": {
       "src": "cb61e6fb3b162c8d",
@@ -5648,14 +5632,6 @@
       "at": "2026-09-25T17:48:43.448Z",
       "approvedAt": "2026-09-25T17:48:47.914Z"
     },
-    "main.form.action.none": {
-      "src": "2d7e552b9ca1ff9b",
-      "area": "main",
-      "machine": true,
-      "needsReview": false,
-      "at": "2026-09-25T17:59:23.544Z",
-      "approvedAt": "2026-09-25T17:59:30.392Z"
-    },
     "main.formato.de.imagen.no.soportado": {
       "src": "84b31c505eef38fc",
       "area": "main",
@@ -5671,14 +5647,6 @@
       "needsReview": false,
       "at": "2026-09-25T17:48:43.448Z",
       "approvedAt": "2026-09-25T17:48:47.914Z"
-    },
-    "main.frame.src.none": {
-      "src": "caa43ebb7da65bcb",
-      "area": "main",
-      "machine": true,
-      "needsReview": false,
-      "at": "2026-09-25T17:59:23.544Z",
-      "approvedAt": "2026-09-25T17:59:30.392Z"
     },
     "main.gemfile": {
       "src": "d09ea66f8227784f",
@@ -11475,6 +11443,102 @@
       "needsReview": false,
       "at": "2026-09-25T17:29:59.149Z",
       "approvedAt": "2026-09-25T17:32:07.888Z"
+    },
+    "main.archivo.demasiado.grande": {
+      "src": "274494aafca229c2",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:27:45.680Z",
+      "approvedAt": "2026-10-12T07:27:45.680Z"
+    },
+    "main.el.proveedor.devolvio.error": {
+      "src": "117dcfdcb3acdb31",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:29:31.000Z",
+      "approvedAt": "2026-10-12T07:29:31.000Z"
+    },
+    "main.el.proveedor.respondio.status": {
+      "src": "35935e5206b762ea",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:29:31.000Z",
+      "approvedAt": "2026-10-12T07:29:31.000Z"
+    },
+    "main.no.se.pudo.conectar.proveedor": {
+      "src": "e6e44b9b4d4e5550",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:29:31.000Z",
+      "approvedAt": "2026-10-12T07:29:31.000Z"
+    },
+    "main.desconocido": {
+      "src": "4b061e983b277ca2",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:29:31.000Z",
+      "approvedAt": "2026-10-12T07:29:31.000Z"
+    },
+    "main.falta.api.key": {
+      "src": "9f4ab85b1957e74f",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:41:35.000Z",
+      "approvedAt": "2026-10-12T07:41:35.000Z"
+    },
+    "main.git.tiempo.agotado": {
+      "src": "7f7285e09a267f4a",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:45:01.000Z",
+      "approvedAt": "2026-10-12T07:45:01.000Z"
+    },
+    "main.web.redirect.sin.destino": {
+      "src": "c73e5ab74b32dcba",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:45:01.000Z",
+      "approvedAt": "2026-10-12T07:45:01.000Z"
+    },
+    "main.web.sitio.respondio": {
+      "src": "2eb7e49c60f38dae",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:45:01.000Z",
+      "approvedAt": "2026-10-12T07:45:01.000Z"
+    },
+    "main.web.direccion.bloqueada": {
+      "src": "091c962b7918f97d",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:45:01.000Z",
+      "approvedAt": "2026-10-12T07:45:01.000Z"
+    },
+    "main.web.host.sin.resolver": {
+      "src": "cce0621b42dee65c",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:45:01.000Z",
+      "approvedAt": "2026-10-12T07:45:01.000Z"
+    },
+    "main.web.host.bloqueado": {
+      "src": "d94623b9d9aca739",
+      "area": "main",
+      "machine": false,
+      "needsReview": false,
+      "at": "2026-10-12T07:45:01.000Z",
+      "approvedAt": "2026-10-12T07:45:01.000Z"
     }
   },
   "version": 1

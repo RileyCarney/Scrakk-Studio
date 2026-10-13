@@ -49,12 +49,23 @@ function canEncrypt(): boolean {
   }
 }
 
-function read(): Store {
+/**
+ * Lee el store. Tres resultados, y solo `missing` es "vacío de verdad":
+ *  - `ok`: se pudo leer (cifrado o texto plano legado).
+ *  - `missing`: no hay archivo todavía (primer uso).
+ *  - `unreadable`: el archivo existe pero no se pudo descifrar ni parsear
+ *    (keyring no lista, truncado, corrupto). NUNCA se trata como vacío al
+ *    escribir: eso borraba todas las cuentas guardadas (B3).
+ */
+type ReadResult = { status: 'ok'; store: Store } | { status: 'missing' } | { status: 'unreadable' }
+
+function readResult(): ReadResult {
   let raw: Buffer
   try {
     raw = fs.readFileSync(filePath())
-  } catch {
-    return emptyStore()
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    return code === 'ENOENT' ? { status: 'missing' } : { status: 'unreadable' }
   }
   let json: string | null = null
   if (canEncrypt()) {
@@ -65,22 +76,52 @@ function read(): Store {
     }
   }
   if (json === null) {
-    // Keyring no lista o archivo en texto plano: intentar leerlo tal cual.
+    // Keyring no lista o archivo en texto plano legado: intentar tal cual.
     json = raw.toString('utf-8')
   }
   try {
     const parsed: unknown = JSON.parse(json)
-    if (!parsed || typeof parsed !== 'object') return emptyStore()
+    if (!parsed || typeof parsed !== 'object') return { status: 'unreadable' }
     const store = parsed as Store
     return {
-      activeId: typeof store.activeId === 'string' ? store.activeId : null,
-      accounts: store.accounts && typeof store.accounts === 'object' ? store.accounts : {}
+      status: 'ok',
+      store: {
+        activeId: typeof store.activeId === 'string' ? store.activeId : null,
+        accounts: store.accounts && typeof store.accounts === 'object' ? store.accounts : {}
+      }
     }
   } catch {
-    return emptyStore()
+    return { status: 'unreadable' }
   }
 }
 
+/** Store para LEER: un archivo ilegible se ve como vacío (sin sesión), sin borrarlo. */
+function read(): Store {
+  const result = readResult()
+  return result.status === 'ok' ? result.store : emptyStore()
+}
+
+/**
+ * Aplica un cambio sobre el store y lo escribe. Si el archivo existe pero es
+ * ilegible, NO escribe: el cambio se descarta y las cuentas guardadas quedan
+ * intactas hasta que el keyring vuelva o el archivo se recupere.
+ */
+function mutate(apply: (store: Store) => void): void {
+  const result = readResult()
+  if (result.status === 'unreadable') {
+    console.warn('[account] store ilegible (¿keyring no listo?): cambio descartado para no borrar cuentas')
+    return
+  }
+  const store = result.status === 'ok' ? result.store : emptyStore()
+  apply(store)
+  write(store)
+}
+
+/**
+ * Escritura atómica: se escribe a un temporal en el mismo directorio, se fuerza
+ * a disco y recién entonces se renombra encima del archivo. Un corte a mitad
+ * deja el archivo anterior intacto (antes: truncado = sesión perdida).
+ */
 function write(store: Store): void {
   const json = JSON.stringify(store)
   let buf: Buffer
@@ -89,11 +130,25 @@ function write(store: Store): void {
   } catch {
     buf = Buffer.from(json, 'utf-8')
   }
+  const target = filePath()
+  const tmp = `${target}.tmp`
   try {
-    fs.mkdirSync(path.dirname(filePath()), { recursive: true, mode: 0o700 })
-    fs.writeFileSync(filePath(), buf, { mode: 0o600 })
+    fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 })
+    const fd = fs.openSync(tmp, 'w', 0o600)
+    try {
+      fs.writeSync(fd, buf)
+      fs.fsyncSync(fd)
+    } finally {
+      fs.closeSync(fd)
+    }
+    fs.renameSync(tmp, target)
   } catch {
     // Un fallo de disco no debe romper la sesión en memoria.
+    try {
+      fs.rmSync(tmp, { force: true })
+    } catch {
+      /* noop */
+    }
   }
 }
 
@@ -116,48 +171,52 @@ export function upsertAccount(
   profile: AccountProfile,
   tokens: { accessToken: string; refreshToken: string }
 ): void {
-  const store = read()
-  store.accounts[profile.id] = { profile, ...tokens }
-  store.activeId = profile.id
-  write(store)
+  mutate((store) => {
+    store.accounts[profile.id] = { profile, ...tokens }
+    store.activeId = profile.id
+  })
 }
 
 /** Actualiza solo los tokens (refresh) de una cuenta. */
 export function updateTokens(userId: string, accessToken: string, refreshToken: string): void {
-  const store = read()
-  const account = store.accounts[userId]
-  if (!account) return
-  account.accessToken = accessToken
-  account.refreshToken = refreshToken
-  write(store)
+  mutate((store) => {
+    const account = store.accounts[userId]
+    if (!account) return
+    account.accessToken = accessToken
+    account.refreshToken = refreshToken
+  })
 }
 
 /** Actualiza solo el snapshot de perfil. */
 export function updateProfileSnapshot(profile: AccountProfile): void {
-  const store = read()
-  const account = store.accounts[profile.id]
-  if (!account) return
-  account.profile = profile
-  write(store)
+  mutate((store) => {
+    const account = store.accounts[profile.id]
+    if (!account) return
+    account.profile = profile
+  })
 }
 
 export function setActive(userId: string): boolean {
-  const store = read()
-  if (!store.accounts[userId]) return false
-  store.activeId = userId
-  write(store)
-  return true
+  let found = false
+  mutate((store) => {
+    if (!store.accounts[userId]) return
+    store.activeId = userId
+    found = true
+  })
+  return found
 }
 
 /** Elimina una cuenta. Devuelve el nuevo activo (o null). */
 export function removeAccount(userId: string): string | null {
-  const store = read()
-  delete store.accounts[userId]
-  if (store.activeId === userId) {
-    store.activeId = Object.keys(store.accounts)[0] ?? null
-  }
-  write(store)
-  return store.activeId
+  let next: string | null = null
+  mutate((store) => {
+    delete store.accounts[userId]
+    if (store.activeId === userId) {
+      store.activeId = Object.keys(store.accounts)[0] ?? null
+    }
+    next = store.activeId
+  })
+  return next ?? read().activeId
 }
 
 /** Resumen para el switcher (sin tokens). */

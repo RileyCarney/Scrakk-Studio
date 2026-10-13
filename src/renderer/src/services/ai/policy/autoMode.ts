@@ -25,7 +25,7 @@ const ROUTINE_PREFIXES: string[] = [
   'grep ', 'which ', 'type ', 'true', 'false', 'test ', 'sort ', 'uniq ', 'tr ', 'cut ', 'diff ',
   'jq ', 'date', 'whoami', 'hostname', 'uname', 'nproc', 'printenv', 'stat ', 'file ', 'tree',
   'basename ', 'dirname ', 'realpath ', 'readlink ', 'strings ', 'sleep ', 'df ', 'du ', 'ps ',
-  'top', 'htop', 'bazel ', 'just ', 'go ', 'kubectl get', 'kubectl logs', 'kubectl describe', 'set'
+  'bazel ', 'just ', 'go ', 'kubectl get', 'kubectl logs', 'kubectl describe', 'set'
 ]
 
 const NPM_SAFE_SUBCOMMANDS = new Set([
@@ -111,6 +111,22 @@ function subcommand(words: string[]): string | null {
   return null
 }
 
+/**
+ * B18: subcomandos git que destruyen trabajo aunque su prefijo esté en la
+ * allowlist (`git checkout -- .` descarta cambios; `git stash clear` borra stashes).
+ */
+const GIT_DESTRUCTIVE_PATTERNS: Array<(words: string[]) => boolean> = [
+  (w) => w[1] === 'stash' && ['clear', 'drop'].includes(w[2]),
+  (w) => w[1] === 'branch' && w.some((x) => x === '-D' || x === '--delete' || x === '-d' || x === '--force'),
+  (w) => w[1] === 'checkout' && w.includes('--') && w.length > 3,
+  (w) => w[1] === 'commit' && w.includes('--amend'),
+  (w) => w[1] === 'clean' && w.some((x) => /^-[a-z]*f/.test(x)),
+  (w) => w[1] === 'reset' && w.includes('--hard')
+]
+
+/** Intérpretes con código inline (`python -c`, `node -e`): el código no es auditable. */
+const INLINE_CODE_FLAGS = new Set(['-c', '-e', '--eval', '--print', '-p', '-'])
+
 /** Un comando es rutinario si su head está en la allowlist (word-boundary). */
 function commandIsRoutine(wordsRaw: string[]): boolean {
   const words = unwrap(wordsRaw)
@@ -118,6 +134,11 @@ function commandIsRoutine(wordsRaw: string[]): boolean {
   if (words[0] === '__unsafe_env__') return false
   const head = basename(words[0])
   const sub = subcommand(words)
+
+  if (head === 'git' && GIT_DESTRUCTIVE_PATTERNS.some((match) => match(words))) return false
+  if (['python', 'python3', 'node'].includes(head) && words.slice(1).some((w) => INLINE_CODE_FLAGS.has(w))) {
+    return false
+  }
 
   if (PACKAGE_MANAGERS.has(head)) {
     if (sub === null) return false
@@ -193,7 +214,8 @@ export interface AutoModeInput {
  */
 export function autoModeVerdict({ access, toolName }: AutoModeInput): AutoVerdict {
   if (ALLOWLISTED_TOOL_NAMES.has(toolName)) return 'allow'
-  if (!access) return 'allow'
+  // B18: sin acceso declarado no se puede auditar: se pregunta (antes: allow).
+  if (!access) return 'ask'
   if (access.kind === 'read' || access.kind === 'grep' || access.kind === 'web_search') return 'allow'
   if (access.kind === 'web_fetch') return 'allow'
   // Auto acepta TODAS las ediciones (decisión de producto del CLI).

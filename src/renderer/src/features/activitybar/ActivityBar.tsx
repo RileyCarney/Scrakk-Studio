@@ -15,6 +15,7 @@
  * instalarse o quitarse extensiones.
  */
 
+import { SvgStringIcon } from '@ui'
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { preloadPanel, useLayout } from '@features/layout'
 import { ExtensionRegistry } from '@services/extensions'
@@ -230,7 +231,7 @@ export function ActivityBar({ side }: { side: ActivityBarSide }): JSX.Element {
             }}
           >
             {typeof button.icon === 'string' ? (
-              <span className={styles.svg} dangerouslySetInnerHTML={{ __html: button.icon }} />
+              <SvgStringIcon className={styles.svg} svg={button.icon} />
             ) : (
               <button.icon size={20} />
             )}
@@ -256,7 +257,7 @@ function DragGhost({ id, x, y }: { id: string; x: number; y: number }): JSX.Elem
     >
       {button ? (
         typeof button.icon === 'string' ? (
-          <span className={styles.svg} dangerouslySetInnerHTML={{ __html: button.icon }} />
+          <SvgStringIcon className={styles.svg} svg={button.icon} />
         ) : (
           <button.icon size={20} />
         )

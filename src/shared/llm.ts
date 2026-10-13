@@ -56,7 +56,11 @@ export interface LlmStreamRequest {
   providerId: string
   baseUrl: string
   model: string
-  apiKey: string
+  /**
+   * Opcional desde B4: el renderer ya no la envía. El main la toma de su store
+   * cifrado por `providerId`. Se acepta todavía por compatibilidad.
+   */
+  apiKey?: string
   /** Headers extra opcionales del proveedor (ej. HTTP-Referer de OpenRouter). */
   headers?: Record<string, string>
   messages: LlmChatMessage[]

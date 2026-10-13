@@ -16,7 +16,7 @@
  */
 
 import { ipcMain } from 'electron'
-import { execFile, execFileSync } from 'child_process'
+import { execFile } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
 import {
@@ -140,15 +140,15 @@ function emptyRepoAs<T>(empty: T): (res: { ok: boolean; stderr: string }) => Git
   }
 }
 
-function mapFailure<T>(res: RunFail, context: string): GitResult<T> {
+export function mapFailure<T>(res: RunFail, context: string): GitResult<T> {
   const stderr = scrub(res.stderr).trim()
   const tail = stderr.split('\n').slice(-3).join(' ').slice(0, 300)
-  if (res.timedOut) return fail('timeout', `${context}: tiempo agotado`)
+  if (res.timedOut) return fail('timeout', t('main.git.tiempo.agotado', { contexto: context }))
   if (/not a git repository|not a git repo/i.test(stderr)) {
     return fail('not-a-repo', t('main.no.es.un.repositorio.git'))
   }
   if (
-    /authentication failed|could not read username|permission denied|401|403|invalid credentials|logon failed/i.test(
+    /authentication failed|could not read username|permission denied|returned error: 40[13]\b|\bHTTP(?:\/[\d.]+)? 40[13]\b|invalid credentials|logon failed/i.test(
       stderr
     )
   ) {
@@ -173,11 +173,13 @@ function resolveCwd(cwd: string): string | null {
 }
 
 /** Un path de archivo debe vivir dentro del cwd (anti traversal). */
-function resolveInRepo(cwd: string, rel: string): string | null {
+export function resolveInRepo(cwd: string, rel: string): string | null {
   if (typeof rel !== 'string' || !rel || rel.includes('\0')) return null
   const abs = path.normalize(path.join(cwd, rel))
   const relative = path.relative(cwd, abs)
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null
+  // `..env.local` es un archivo legítimo: solo escapa si es `..` o empieza por `../`.
+  const escapes = relative === '..' || relative.startsWith('..' + path.sep)
+  if (!relative || escapes || path.isAbsolute(relative)) return null
   return relative
 }
 
@@ -199,10 +201,12 @@ function isSafeUrl(url: string): boolean {
   return /^(https?:\/\/|ssh:\/\/|git@[^:]+:)/.test(url)
 }
 
-let gitBinary: boolean | null = null
+// Solo se cachea el éxito: si git no estaba y el usuario lo instala con la app
+// abierta, debe detectarse sin reiniciar (B15).
+let gitBinary = false
 
 async function hasGit(): Promise<boolean> {
-  if (gitBinary !== null) return gitBinary
+  if (gitBinary) return true
   try {
     const res = await run('git', ['--version'], undefined, { timeoutMs: 8000 })
     gitBinary = res.ok
@@ -250,56 +254,52 @@ export function registerGitIpc(): void {
     return { ok: true, data: res.stdout.trim() }
   })
 
+  // Escaneo ASÍNCRONO (B8): antes usaba readdirSync/execFileSync y congelaba el
+  // proceso principal (todas las ventanas) durante hasta 50 repos × 8 s.
   guarded(GIT_IPC.detectRepos, async (req: { root: string; maxDepth?: number }) => {
     const root = resolveCwd(req.root)
     if (!root) return fail<GitRepoInfo[]>('invalid', t('main.raiz.invalida'))
     const maxDepth = Math.max(0, Math.min(req.maxDepth ?? MAX_SCAN_DEPTH, 8))
     const found: GitRepoInfo[] = []
-    const walk = (dir: string, depth: number): void => {
+
+    const hasGitDir = async (dir: string): Promise<boolean> =>
+      fs.promises
+        .stat(path.join(dir, '.git'))
+        .then((st) => st.isDirectory())
+        .catch(() => false)
+
+    const toplevelOf = async (dir: string): Promise<string | null> => {
+      const res = await run('git', ['rev-parse', '--show-toplevel'], dir, { timeoutMs: 8000 })
+      const top = res.ok ? res.stdout.trim() : ''
+      return top || null
+    }
+
+    const walk = async (dir: string, depth: number): Promise<void> => {
       if (found.length >= MAX_REPOS || depth > maxDepth) return
       let entries: fs.Dirent[]
       try {
-        entries = fs.readdirSync(dir, { withFileTypes: true })
+        entries = await fs.promises.readdir(dir, { withFileTypes: true })
       } catch {
         return
       }
       for (const entry of entries) {
+        if (found.length >= MAX_REPOS) return
         if (!entry.isDirectory() && entry.name !== '.git') continue
         if (entry.isDirectory() && entry.name === 'node_modules') continue
         if (entry.isDirectory() && entry.name.startsWith('.') && entry.name !== '.git') continue
         const full = path.join(dir, entry.name)
-        if (entry.name === '.git' || (entry.isDirectory() && hasGitDir(full))) {
-          const toplevel = toplevelOf(entry.name === '.git' ? dir : full)
+        if (entry.name === '.git' || (entry.isDirectory() && (await hasGitDir(full)))) {
+          const toplevel = await toplevelOf(entry.name === '.git' ? dir : full)
           if (toplevel && !found.some((r) => r.toplevel === toplevel)) {
             found.push({ root: toplevel, toplevel })
           }
           continue
         }
-        if (entry.isDirectory()) walk(full, depth + 1)
+        if (entry.isDirectory()) await walk(full, depth + 1)
       }
     }
-    const hasGitDir = (dir: string): boolean => {
-      try {
-        return fs.statSync(path.join(dir, '.git')).isDirectory()
-      } catch {
-        return false
-      }
-    }
-    const toplevelOf = (dir: string): string | null => {
-      try {
-        const out = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-          cwd: dir,
-          encoding: 'utf-8',
-          timeout: 8000,
-          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-        })
-        const t = out.trim()
-        return t || null
-      } catch {
-        return null
-      }
-    }
-    walk(root, 0)
+
+    await walk(root, 0)
     // La raíz misma primero si es repo (caso común: un solo repo).
     found.sort((a, b) => (a.toplevel === root ? -1 : 0) - (b.toplevel === root ? -1 : 0))
     return { ok: true, data: found }

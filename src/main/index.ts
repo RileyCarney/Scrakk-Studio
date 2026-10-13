@@ -6,6 +6,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { I18N_IPC } from '@shared/window-controls'
 import { setLocale } from '@shared/i18n'
 import { registerLlmIpc } from './ipc/llm'
+import { registerSecretsIpc } from './secrets/ipc'
 import { registerFsIpc } from './ipc/fs'
 import { registerWindowControlsIpc } from './ipc/window-controls'
 import { registerScreenshotIpc } from './ipc/screenshot'
@@ -28,10 +29,11 @@ import {
 } from './ipc/extension-host'
 import { flushAllTokens } from './supabaseClient'
 import { loadLocalEnv } from './env'
-import { createMainWindow, isAppLocalUrl } from './windows/main-window'
+import { createMainWindow, installPermissionPolicy, isAllowedNavigation, isAppLocalUrl } from './windows/main-window'
 import { stopKolargrepServers } from './search/kolargrepServer'
 import { applyPathAugmentation } from './binaries'
 import { applyChromiumSwitches, registerGpuFallback } from './perf/startup'
+import { logError } from './log'
 
 // PATH ANTES QUE NADA: lanzada desde el menú, la app hereda el PATH pelado de la
 // sesión (sin nvm/fnm/volta/~/.local/bin), y entonces `npm`, `node` y `git` no
@@ -52,6 +54,11 @@ registerGpuFallback()
 // Esquema de las extensiones (`scrakk-ext://`): sirve los documentos de
 // webview y los assets de los paquetes. DEBE registrarse antes de `ready`.
 registerExtensionScheme()
+
+// B7: un error no capturado en el proceso principal no debe ser silencioso ni
+// tirar la app entera sin rastro. Se registra y la app sigue viva.
+process.on('uncaughtException', (error) => logError('main', error))
+process.on('unhandledRejection', (reason) => logError('main:unhandled', reason))
 
 app.setName('scrakk-studio')
 if (process.platform === 'linux') {
@@ -83,6 +90,7 @@ if (!gotTheLock) {
     registerWindowControlsIpc()
     registerScreenshotIpc()
     registerLlmIpc()
+    registerSecretsIpc()
     registerFsIpc()
     registerExtensionsIpc()
     registerLspIpc()
@@ -113,15 +121,18 @@ if (!gotTheLock) {
       // navegaciones al propio dev server (reload de Vite HMR) se dejan pasar
       // EN la ventana; si no, el reload se cancela, la app queda congelada y
       // la URL local termina abierta en el navegador del sistema.
+      // B24: fuera de nuestro origen no se navega dentro de la app (ni file:,
+      // ni scrakk-ext:, ni data:, ni javascript:).
       contents.on('will-navigate', (event, url) => {
-        if (isAppLocalUrl(url)) return
+        if (isAllowedNavigation(url)) return
+        event.preventDefault()
         if (url.startsWith('http://') || url.startsWith('https://')) {
-          event.preventDefault()
           void shell.openExternal(url)
         }
       })
     })
 
+    installPermissionPolicy()
     createMainWindow()
 
     // macOS: re-crear la ventana al activar el dock si no hay ninguna.
@@ -132,14 +143,22 @@ if (!gotTheLock) {
 
   // Flush de sesiones al cerrar: garantiza que los últimos tokens queden
   // guardados aunque el refresh haya ocurrido justo antes de salir.
-  app.on('before-quit', () => {
-    void flushAllTokens()
-    // Los hosts de extensión son procesos aparte: sin esto quedan vivos
-    // (y en Windows impiden que el instalador reemplace archivos).
-    void shutdownExtensionHosts()
-    // Los servidores de búsqueda (kolargrep serve) también: el índice tiene un
-    // lock exclusivo por directorio, así que uno colgado bloquea al siguiente.
-    stopKolargrepServers()
+  // Al salir se ESPERAN las tareas de cierre (B9): antes eran fire-and-forget y
+  // el proceso moría antes de guardar los tokens refrescados. Hay un tope de
+  // 3 s para que un proceso colgado no impida cerrar la app.
+  let shuttingDown = false
+  app.on('before-quit', (event) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    event.preventDefault()
+    const tasks = Promise.allSettled([flushAllTokens(), shutdownExtensionHosts()])
+    const deadline = new Promise<void>((resolve) => setTimeout(resolve, 3000))
+    void Promise.race([tasks, deadline]).finally(() => {
+      // Los servidores de búsqueda (kolargrep serve) tienen un lock exclusivo
+      // por directorio: uno colgado bloquea al siguiente, así que van al final.
+      stopKolargrepServers()
+      app.quit()
+    })
   })
 
   app.on('window-all-closed', () => {

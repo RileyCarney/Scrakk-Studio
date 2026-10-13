@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Licencia completa en LICENSE (Apache License 2.0).
 
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, type WebContents } from 'electron'
 import * as pty from 'node-pty'
 import * as fs from 'fs'
+import * as os from 'os'
 import * as path from 'path'
 import { execSync } from 'child_process'
 import { TERMINAL_IPC, type TerminalCreateRequest, type TerminalWriteRequest, type TerminalResizeRequest, type TerminalDestroyRequest } from '@shared/terminal'
@@ -27,6 +28,8 @@ interface PtyProc {
 }
 
 const terms = new Map<string, PtyProc>()
+/** Terminales por ventana: al cerrarla (o recargarla) se matan sus shells (B6). */
+const termsByOwner = new Map<number, Set<string>>()
 
 /** Entero positivo o el fallback (node-pty rechaza 0/NaN al crear o resized). */
 function positiveInt(value: unknown, fallback: number): number {
@@ -34,11 +37,33 @@ function positiveInt(value: unknown, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
+/**
+ * Shell por plataforma. El renderer pide `bash` por defecto, que no existe en
+ * Windows: ahí se usa COMSPEC / PowerShell (B6).
+ */
 function getShell(shell?: string): string {
+  if (process.platform === 'win32') {
+    if (shell && path.isAbsolute(shell)) return shell
+    return process.env.COMSPEC || 'powershell.exe'
+  }
   if (shell && shell.startsWith('/')) return shell
   if (shell === 'zsh') return '/bin/zsh'
   if (shell === 'bash' || !shell) return process.env.SHELL || '/bin/bash'
   return shell
+}
+
+/** Directorio de trabajo: el pedido si existe, si no el home (nunca `/` ni HOME vacío). */
+function workingDir(cwd?: string): string {
+  if (cwd && fs.existsSync(cwd)) return cwd
+  return os.homedir()
+}
+
+function killOwnedTerminals(ownerId: number): void {
+  for (const id of termsByOwner.get(ownerId) ?? []) {
+    terms.get(id)?.kill()
+    terms.delete(id)
+  }
+  termsByOwner.delete(ownerId)
 }
 
 export function registerTerminalIpc(): void {
@@ -47,39 +72,56 @@ export function registerTerminalIpc(): void {
     if (!id) return { success: false, error: t('main.missing.id') }
     if (terms.has(id)) return { success: true }
     const sh = getShell(shell)
-    const work = cwd || process.env.HOME || '/'
+    const work = workingDir(cwd)
     // La vista puede medir 0×0 (canvas sin layout todavía): node-pty exige
     // positivos, así que se cae a 80×24.
     const initialCols = positiveInt(cols, 80)
     const initialRows = positiveInt(rows, 24)
     // PTY real con node-pty: convierte \n -> \r\n automáticamente, señales, resize.
     const { npm_config_prefix: _omit, ...cleanEnv } = process.env as Record<string, string | undefined>
-    const proc = pty.spawn(sh, [], {
-      name: 'xterm-256color',
-      cwd: work,
-      env: {
-        ...cleanEnv,
-        TERM: 'xterm-256color',
-        COLUMNS: String(initialCols),
-        LINES: String(initialRows)
-      } as Record<string, string>,
-      cols: initialCols,
-      rows: initialRows
-    }) as unknown as PtyProc
+    let proc: PtyProc
+    try {
+      proc = pty.spawn(sh, [], {
+        name: 'xterm-256color',
+        cwd: work,
+        env: {
+          ...cleanEnv,
+          TERM: 'xterm-256color',
+          COLUMNS: String(initialCols),
+          LINES: String(initialRows)
+        } as Record<string, string>,
+        cols: initialCols,
+        rows: initialRows
+      }) as unknown as PtyProc
+    } catch (error) {
+      // Un shell inexistente o un cwd inválido no debe tumbar el invoke.
+      const message = error instanceof Error ? error.message : String(error)
+      return { success: false, error: message }
+    }
 
     terms.set(id, proc)
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const owner: WebContents = event.sender
+    const ownerId = owner.id
+    if (!termsByOwner.has(ownerId)) {
+      termsByOwner.set(ownerId, new Set())
+      owner.once('destroyed', () => killOwnedTerminals(ownerId))
+    }
+    termsByOwner.get(ownerId)!.add(id)
+
+    // Un envío a una ventana ya destruida lanza "Object has been destroyed" y
+    // tumba el proceso principal desde el callback del PTY (B6).
     const sendData = (data: string): void => {
-      win?.webContents.send(TERMINAL_IPC.onData, { id, data })
+      if (!owner.isDestroyed()) owner.send(TERMINAL_IPC.onData, { id, data })
     }
     const sendExit = (code: number): void => {
-      win?.webContents.send(TERMINAL_IPC.onExit, { id, exitCode: code })
+      if (!owner.isDestroyed()) owner.send(TERMINAL_IPC.onExit, { id, exitCode: code })
     }
 
     proc.onData((data) => sendData(data))
     proc.onExit((code) => {
       sendExit(code)
       terms.delete(id)
+      termsByOwner.get(ownerId)?.delete(id)
     })
     return { success: true }
   })
