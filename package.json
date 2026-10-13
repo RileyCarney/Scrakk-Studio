@@ -14,7 +14,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build && node native/copy-node.mjs",
     "preview": "electron-vite preview",
-    "typecheck": "tsc -b --pretty",
+    "typecheck": "tsc -b --pretty && tsc -p api/tsconfig.json --pretty",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -38,7 +38,9 @@
     "sef:validate": "node tools/sef/index.ts validate",
     "docs": "node tools/docs/build.mjs",
     "docs:init": "node tools/docs/build.mjs --init",
-    "docs:check": "node tools/docs/build.mjs --check"
+    "docs:check": "node tools/docs/build.mjs --check",
+    "api": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON api/server.ts",
+    "api:postman": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON api/postman/run.ts"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.3.5",
